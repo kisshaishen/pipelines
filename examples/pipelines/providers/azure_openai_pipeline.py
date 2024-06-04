@@ -51,17 +51,30 @@ class Pipeline:
         url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPLOYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
 
         try:
+            print(body)
+            
             r = requests.post(
                 url=url,
-                json={**body, "model": self.valves.MODEL},
+                json={'messages': messages},
                 headers=headers,
                 stream=True,
             )
-
             r.raise_for_status()
-            if body["stream"]:
-                return r.iter_lines()
+            response = r.json()
+            print(response)
+            if 'choices' in response:
+                choices = response['choices']
+                r_str = choices[0]['message']['content']
+                print(r_str)
             else:
-                return r.json()
+                print("The response does not contain 'choices'.")
+            r_str = choices[0]['message']['content']
+            print(r_str)
+            if body["stream"]:
+                print("stream is true")
+                return r_str
+            else:
+                print("stream is not true")
+                return r_str
         except Exception as e:
-            return f"Error: {e}"
+            return f"Error here: {e}"
