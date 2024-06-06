@@ -17,6 +17,9 @@ class Pipeline:
         MODEL: str = "gpt-4o"
         pass
 
+    class State:
+        chatId: str = ""
+
     def __init__(self):
         # Optionally, you can set the id and name of the pipeline.
         # Best practice is to not specify the id so that it can be automatically inferred from the filename, so that users can install multiple versions of the same pipeline.
@@ -25,6 +28,7 @@ class Pipeline:
         # self.id = "assistent_approval"
         self.name = "审批助手"
         self.valves = self.Valves()
+        self.state = self.State()
         pass
 
     async def on_startup(self):
@@ -225,22 +229,32 @@ class Pipeline:
         print(user_message)
         print(body)
 
+        if self.state.chatId == "":
+            print("first chat!")
+            self.state.chatId = body["chat_id"]
+        else:
+            print("continue chat!")
+            if self.state.chatId != body["chat_id"]:
+                print("change chat Id!")
+                self.state.chatId = body["chat_id"]
+
         assistant = self.create_assistant(
             HEADERS,
             name="审批助手",
             instructions='''
                 你是一个审批助手，为相关的审批者提供数据，并通过tools来完成最终的审批数据提交，你需要尽量以自然语言来跟用户进行交互，
                 对收集到的数据进行适合的转换，类似于摘要文字及表格化处理，以便于用户浏览
-                当用户想要查看审批数据时，你应该主要以项目表进行，并且应该只读取一条信息出来，并以自然语言形成简报
+                当用户想要查看审批数据时，你应该主要以项目表进行，并且应该只读取一条信息出来，并以自然语言形成简报,当用户需要具体表的详细信息时，尽量以表格形式提供
                 ------------------------------------------------------------
-                目前的数据主要是几个Excel，相关内容如下：
+                读取项目信息简报时，需要显示EIS_ID, 但不用特别强调，它将作为Function-Call的重要参数
+                ------------------------------------------------------------
+                目前的数据主要是几个csv文件，几个文件是以EIS_ID进行的关联，每张表的描述如下：
                 1. 项目表，主要数据内容都存在这个表内
-                2. 利率表，相关项目的一些费用信息，审批者有可能需要看到
-                ------------------------------------------------------------
-                在上传的表格: 利率表，有一些列没有列出来，但是是可以以下公式推导出来的：
-                利率表.总收入 =  利率表.合同额 / 1.13
-                利率表.采购成本 = 利率表.外采成本 + 利率表.实施成本 + 利率表.定制化开发
-                利率表.毛利 = 利率表.总收入 - 利率表.采购成本
+                2. 指标表，相关项目的一些指标信息，以及相关指标是否达标的结果
+                3. 利润表，相关项目各项成本，以及毛利、净利润等信息
+                4. 现金流量表，相关项目现金情况及人力成本等，此部分每个项目分用季度进行了拆分，你应该查询所有季度一同展示
+                5. 现金流量合计表，相关项目现金情况的4个季度汇总，在查询现金流量表时，你应该结合合度表一同显示
+                ------------------------------------------------------------                
             ''',
             tools=[
                     {"type": "code_interpreter"},
@@ -272,7 +286,12 @@ class Pipeline:
                         }
                     }
                 ],
-            file_ids=["assistant-fKoHMJJsPLTDp0Q1vG319Fjo", "assistant-wEPQ0gUHfj9hSmtRTSauPz1q"]
+            file_ids=["assistant-JKbclOdlDt1CFbAxONi3wMty", 
+                    "assistant-t2zSJ0qQ34hthSEmnpvEydJB",
+                    "assistant-ZAczI4vLPoTKLQEUJZ98HVYR",
+                    "assistant-ourPtuJ8sRnvhFtiFjmZMjeA",
+                    "assistant-RU44oWpxiZrDncpOwYZcD9PH"
+                    ]
         )
 
         print("create thread!")
@@ -289,7 +308,7 @@ class Pipeline:
         print("check function call")
         self.poll_run_till_completion(HEADERS, threadId=thread["id"], runId=run["id"], available_functions=availableFunctions)
 
-        #url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPLOYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
+        #url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPL``OYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
 
         print("check response!")
         try:
