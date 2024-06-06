@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import requests
 import time
 import json
+import openai
 
 
 class Pipeline:
@@ -105,10 +106,11 @@ class Pipeline:
         response.raise_for_status()
         return response.json()
 
-    def submit_tool_outputs(self, HEADERS, thread_id, run_id, toolOutput):
+    def submit_tool_outputs(self, HEADERS, thread_id, run_id, tool_outputs):
         url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/threads/{thread_id}/runs/{run_id}/submit_tool_outputs?api-version={self.valves.API_VERSION}"
         
-        response = requests.post(url, json=toolOutput, headers=HEADERS)
+        print("submit")
+        response = requests.post(url, json=tool_outputs, headers=HEADERS)
         response.raise_for_status()
         
         print(response.json())
@@ -136,7 +138,8 @@ class Pipeline:
             @parm approvalStatus: 审批状态， 1为通过，3为拒绝
             @parm remark: 审批及拒绝的原因
         """
-        print(f"approve: eisId: {eisId}, approvalStatus: {approvalStatus}, remark: {remark}")
+        '''xytoken?'''
+        #print(f"approve: eisId: {eisId}, approvalStatus: {approvalStatus}, remark: {remark}")
         return "审批已完成"
 
     def poll_run_till_completion(
@@ -172,7 +175,7 @@ class Pipeline:
                 cnt += 1
                 
                 if run_status["status"] == "requires_action":
-                    tool_responses = []
+                    tool_responses = {"tool_outputs": []}
                     if (
                         run_status["required_action"]["type"] == "submit_tool_outputs"
                         and run_status["required_action"]["submit_tool_outputs"]["tool_calls"] is not None
@@ -187,8 +190,10 @@ class Pipeline:
                                 
                                 function_to_call = available_functions[call["function"]["name"]]
                                 tool_response = function_to_call(**json.loads(call["function"]["arguments"]))
-                                tool_responses.append({"tool_call_id": call["id"], "output": tool_response})
+                                tool_responses["tool_outputs"].append({"tool_call_id": call["id"], "output": tool_response})
+                                print(f"tool_responses: {tool_responses}")
 
+                    print("start submit")
                     self.submit_tool_outputs(
                         HEADERS, thread_id=threadId, run_id=runId, tool_outputs=tool_responses
                     )
@@ -218,6 +223,7 @@ class Pipeline:
 
         print(messages)
         print(user_message)
+        print(body)
 
         assistant = self.create_assistant(
             HEADERS,
@@ -268,20 +274,24 @@ class Pipeline:
                 ],
             file_ids=["assistant-fKoHMJJsPLTDp0Q1vG319Fjo", "assistant-wEPQ0gUHfj9hSmtRTSauPz1q"]
         )
+
+        print("create thread!")
         thread = self.create_thread(HEADERS)
 
+        print("create message!")
         message = self.create_message(HEADERS, thread_id=thread["id"], role="user", content=user_message)
 
+        print("create run!")
         run = self.create_run(HEADERS, thread_id=thread["id"], assistant_id=assistant["id"])
 
         availableFunctions = {"projectapproval": self.projectapproval}
 
+        print("check function call")
         self.poll_run_till_completion(HEADERS, threadId=thread["id"], runId=run["id"], available_functions=availableFunctions)
 
         #url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPLOYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
 
-        print("reStart!")
-
+        print("check response!")
         try:
             while True:
                 run_status = self.retrieve_run(HEADERS, thread_id=thread["id"], run_id=run["id"])
