@@ -18,7 +18,10 @@ class Pipeline:
         pass
 
     class State:
-        chatId: str = ""
+        ChatId: str = ""
+        CreateThread: bool = False
+        AssistantId: str = ""
+        ThreadId: str = ""
 
     def __init__(self):
         # Optionally, you can set the id and name of the pipeline.
@@ -229,94 +232,103 @@ class Pipeline:
         print(user_message)
         print(body)
 
-        if self.state.chatId == "":
+        '''
+            基于WebUI的chatId来判断当前是否为新的thread
+        '''
+        if self.state.ChatId == "":
             print("first chat!")
-            self.state.chatId = body["chat_id"]
+            self.state.ChatId = body["chat_id"]
+            self.state.CreateThread = True
         else:
             print("continue chat!")
-            if self.state.chatId != body["chat_id"]:
+            self.state.CreateThread = False
+            if self.state.ChatId != body["chat_id"]:
                 print("change chat Id!")
-                self.state.chatId = body["chat_id"]
+                self.state.ChatId = body["chat_id"]
+                self.state.CreateThread = True
 
-        assistant = self.create_assistant(
-            HEADERS,
-            name="审批助手",
-            instructions='''
-                你是一个审批助手，为相关的审批者提供数据，并通过tools来完成最终的审批数据提交，你需要尽量以自然语言来跟用户进行交互，
-                对收集到的数据进行适合的转换，类似于摘要文字及表格化处理，以便于用户浏览
-                当用户想要查看审批数据时，你应该主要以项目表进行，并且应该只读取一条信息出来，并以自然语言形成简报,当用户需要具体表的详细信息时，尽量以表格形式提供
-                ------------------------------------------------------------
-                读取项目信息简报时，需要显示EIS_ID, 但不用特别强调，它将作为Function-Call的重要参数
-                ------------------------------------------------------------
-                目前的数据主要是几个csv文件，几个文件是以EIS_ID进行的关联，每张表的描述如下：
-                1. 项目表，主要数据内容都存在这个表内
-                2. 指标表，相关项目的一些指标信息，以及相关指标是否达标的结果
-                3. 利润表，相关项目各项成本，以及毛利、净利润等信息
-                4. 现金流量表，相关项目现金情况及人力成本等，此部分每个项目分用季度进行了拆分，你应该查询所有季度一同展示
-                5. 现金流量合计表，相关项目现金情况的4个季度汇总，在查询现金流量表时，你应该结合合度表一同显示
-                ------------------------------------------------------------                
-            ''',
-            tools=[
-                    {"type": "code_interpreter"},
-                    {
-                        "type": "function",
-                        "function" : {
-                            "name": "projectapproval",
-                            "description": "对项目数据进行审批，可以是通过审批或拒绝审批",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                "eisId": {
-                                    "type": "integer",
-                                    "description": "项目表数据中的EisID, 用于标记是哪个项目"
-                                },
-                                "approvalStatus": {
-                                    "type": "integer",
-                                    "description": "审批通过对应值为1， 不通过对应值为3"
-                                },
-                                "remark": {
-                                    "type": "string",
-                                    "description": "描述信息，用于描述通过意见或拒绝意见, 拒绝时remark是必须的"
+        if self.state.CreateThread:
+            assistant = self.create_assistant(
+                HEADERS,
+                name="审批助手",
+                instructions='''
+                    你是一个审批助手，为相关的审批者提供数据，并通过tools来完成最终的审批数据提交，你需要尽量以自然语言来跟用户进行交互，
+                    对收集到的数据进行适合的转换，类似于摘要文字及表格化处理，以便于用户浏览
+                    当用户想要查看审批数据时，你应该主要以项目表进行，并且应该只读取一条信息出来，并以自然语言形成简报,当用户需要具体表的详细信息时，尽量以表格形式提供
+                    ------------------------------------------------------------
+                    读取项目信息简报时，需要显示EIS_ID, 但不用特别强调，它将作为Function-Call的重要参数
+                    ------------------------------------------------------------
+                    目前的数据主要是几个csv文件，几个文件是以EIS_ID进行的关联，每张表的描述如下：
+                    1. 项目表，主要数据内容都存在这个表内
+                    2. 指标表，相关项目的一些指标信息，以及相关指标是否达标的结果
+                    3. 利润表，相关项目各项成本，以及毛利、净利润等信息
+                    4. 现金流量表，相关项目现金情况及人力成本等，此部分每个项目分用季度进行了拆分，你应该查询所有季度一同展示
+                    5. 现金流量合计表，相关项目现金情况的4个季度汇总，在查询现金流量表时，你应该结合合度表一同显示
+                    ------------------------------------------------------------                
+                ''',
+                tools=[
+                        {"type": "code_interpreter"},
+                        {
+                            "type": "function",
+                            "function" : {
+                                "name": "projectapproval",
+                                "description": "对项目数据进行审批，可以是通过审批或拒绝审批",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                    "eisId": {
+                                        "type": "integer",
+                                        "description": "项目表数据中的EisID, 用于标记是哪个项目"
+                                    },
+                                    "approvalStatus": {
+                                        "type": "integer",
+                                        "description": "审批通过对应值为1， 不通过对应值为3"
+                                    },
+                                    "remark": {
+                                        "type": "string",
+                                        "description": "描述信息，用于描述通过意见或拒绝意见, 拒绝时remark是必须的"
+                                    }
+                                    },
+                                    "required": [
+                                    "eisId", "approvalStatus"
+                                    ]
                                 }
-                                },
-                                "required": [
-                                "eisId", "approvalStatus"
-                                ]
                             }
                         }
-                    }
-                ],
-            file_ids=["assistant-JKbclOdlDt1CFbAxONi3wMty", 
-                    "assistant-t2zSJ0qQ34hthSEmnpvEydJB",
-                    "assistant-ZAczI4vLPoTKLQEUJZ98HVYR",
-                    "assistant-ourPtuJ8sRnvhFtiFjmZMjeA",
-                    "assistant-RU44oWpxiZrDncpOwYZcD9PH"
-                    ]
-        )
+                    ],
+                file_ids=["assistant-JKbclOdlDt1CFbAxONi3wMty", 
+                        "assistant-t2zSJ0qQ34hthSEmnpvEydJB",
+                        "assistant-ZAczI4vLPoTKLQEUJZ98HVYR",
+                        "assistant-ourPtuJ8sRnvhFtiFjmZMjeA",
+                        "assistant-RU44oWpxiZrDncpOwYZcD9PH"
+                        ]
+            )
+            self.state.AssistantId = assistant["id"]
 
-        print("create thread!")
-        thread = self.create_thread(HEADERS)
+            print("create thread!")
+            thread = self.create_thread(HEADERS)
+            self.state.ThreadId = thread["id"]
 
         print("create message!")
-        message = self.create_message(HEADERS, thread_id=thread["id"], role="user", content=user_message)
+        message = self.create_message(HEADERS, thread_id=self.state.ThreadId, role="user", content=user_message)
 
         print("create run!")
-        run = self.create_run(HEADERS, thread_id=thread["id"], assistant_id=assistant["id"])
+        run = self.create_run(HEADERS, thread_id=self.state.ThreadId, assistant_id=self.state.AssistantId)
 
         availableFunctions = {"projectapproval": self.projectapproval}
 
         print("check function call")
-        self.poll_run_till_completion(HEADERS, threadId=thread["id"], runId=run["id"], available_functions=availableFunctions)
+        self.poll_run_till_completion(HEADERS, threadId=self.state.ThreadId, runId=run["id"], available_functions=availableFunctions)
 
         #url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPL``OYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
 
         print("check response!")
         try:
             while True:
-                run_status = self.retrieve_run(HEADERS, thread_id=thread["id"], run_id=run["id"])
+                run_status = self.retrieve_run(HEADERS, thread_id=self.state.ThreadId, run_id=run["id"])
 
                 if run_status["status"] == "completed":
-                    messages = self.list_messages(HEADERS, thread_id=thread["id"])                    
+                    messages = self.list_messages(HEADERS, thread_id=self.state.ThreadId)                    
                     rst = self.return_messages(messages)
                     print(rst)
                     return rst
