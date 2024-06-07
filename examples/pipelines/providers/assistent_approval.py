@@ -172,7 +172,7 @@ class Pipeline:
 
         rst = "审批已完成"
         if response.json()["code"] != 1:
-            rst = f"审批失败, 错误信息：{response.json()["msg"]}"
+            rst = f'审批失败, 错误信息：{response.json()["msg"]}'
 
         return rst
 
