@@ -159,7 +159,8 @@ class Pipeline:
         payload = {
             "username": self.state.UserName,
             "EIS_ID": eisId,
-            "approval": approvalStatus
+            "approval": approvalStatus,
+            "remark": remark
         }
         HEADERS = {
                 "Content-Type": "application/json",
