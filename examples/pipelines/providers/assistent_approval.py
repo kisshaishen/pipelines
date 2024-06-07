@@ -50,12 +50,20 @@ class Pipeline:
         response.raise_for_status()
         return response.json()["data"]
 
-    def create_assistant(self, HEADERS, name, instructions, tools, file_ids):
+    def create_assistant(self, HEADERS, name, instructions, tools, file_ids, userName):
         existing_assistants = self.list_assistants(HEADERS)
         for assistant in existing_assistants:
-            if assistant["name"] == name:
-                return self.update_assistant(HEADERS, assistant["id"], name, instructions, tools, file_ids)
-                #return assistant
+            if userName == "周林":
+                if assistant["name"] == "审批助手_周总":
+                    return self.update_assistant(HEADERS, assistant["id"], "审批助手_周总", instructions, tools, file_ids)
+                    #return assistant
+            elif userName == "苏婷":
+                if assistant["name"] == "审批助手_财务":
+                    return self.update_assistant(HEADERS, assistant["id"], "审批助手_财务", instructions, tools, file_ids)
+                    #return assistant
+            else:
+                if assistant["name"] == "审批助手_财务":
+                    return self.update_assistant(HEADERS, assistant["id"], "审批助手_财务", instructions, tools, file_ids)
 
         url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/assistants?api-version={self.valves.API_VERSION}"
         payload = {
@@ -242,15 +250,21 @@ class Pipeline:
         else:
             print("continue chat!")
             self.state.CreateThread = False
+            print(self.state.ThreadId)
             if self.state.ChatId != body["chat_id"]:
                 print("change chat Id!")
                 self.state.ChatId = body["chat_id"]
                 self.state.CreateThread = True
+            if self.state.AssistantId == "" or self.state.ThreadId == "":
+                print("miss assistant or thread!")
+                self.state.ChatId = body["chat_id"]
+                self.state.CreateThread = True
+
 
         if self.state.CreateThread:
             assistant = self.create_assistant(
                 HEADERS,
-                name="审批助手",
+                name="审批助手_财务",
                 instructions='''
                     你是一个审批助手，为相关的审批者提供数据，并通过tools来完成最终的审批数据提交，你需要尽量以自然语言来跟用户进行交互，
                     对收集到的数据进行适合的转换，类似于摘要文字及表格化处理，以便于用户浏览
@@ -263,8 +277,10 @@ class Pipeline:
                     2. 指标表，相关项目的一些指标信息，以及相关指标是否达标的结果
                     3. 利润表，相关项目各项成本，以及毛利、净利润等信息
                     4. 现金流量表，相关项目现金情况及人力成本等，此部分每个项目分用季度进行了拆分，你应该查询所有季度一同展示
-                    5. 现金流量合计表，相关项目现金情况的4个季度汇总，在查询现金流量表时，你应该结合合度表一同显示
-                    ------------------------------------------------------------                
+                    ------------------------------------------------------------
+                    当用户要求进行审批时，你需要把主要信息列举一下，例如：商机名称，销售姓名，立项日期，客户名称，以及EIS_ID, 商机编号等信息，将这些信息组成一个简报
+                    展示给用户，等用户再次确认后，再进行Function-Call的调用          
+                    ------------------------------------------------------------      
                 ''',
                 tools=[
                         {"type": "code_interpreter"},
@@ -301,7 +317,9 @@ class Pipeline:
                         "assistant-ZAczI4vLPoTKLQEUJZ98HVYR",
                         "assistant-ourPtuJ8sRnvhFtiFjmZMjeA",
                         "assistant-RU44oWpxiZrDncpOwYZcD9PH"
-                        ]
+                        ],
+                userName=body["user"]["name"]
+                
             )
             self.state.AssistantId = assistant["id"]
 
