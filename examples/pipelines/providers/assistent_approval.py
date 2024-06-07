@@ -167,7 +167,14 @@ class Pipeline:
             }
         response = requests.post(url, json=payload, headers=HEADERS)
         response.raise_for_status()
-        return response.json()
+
+        print(response.json())
+
+        rst = "审批已完成"
+        if response.json()["code"] != 1:
+            rst = f"审批失败, 错误信息：{response.json()["msg"]}"
+
+        return rst
 
         #return "审批已完成"
 
@@ -286,7 +293,7 @@ class Pipeline:
                     ------------------------------------------------------------
                     除项目表之外的关联表查询每次应该只查询出与当前项目相关的所有数据，例如查询一条项目简报中的EisId相关的所有指标数据
                     ------------------------------------------------------------
-                    读取项目信息简报时，需要显示EIS_ID, 但不用特别强调，它将作为Function-Call的重要参数
+                    所有数据查询的结果，都需要显示EIS_ID, 但不用特别强调，它将作为Function-Call的重要参数
                     ------------------------------------------------------------
                     目前的数据主要是几个csv文件，几个文件是以EIS_ID进行的关联，每张表的描述如下：
                     1. 项目表，主要数据内容都存在这个表内
