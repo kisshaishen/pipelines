@@ -22,6 +22,7 @@ class Pipeline:
         CreateThread: bool = False
         AssistantId: str = ""
         ThreadId: str = ""
+        UserName: str = ""
 
     def __init__(self):
         # Optionally, you can set the id and name of the pipeline.
@@ -153,9 +154,22 @@ class Pipeline:
             @parm approvalStatus: 审批状态， 1为通过，3为拒绝
             @parm remark: 审批及拒绝的原因
         """
-        '''xytoken?'''
         #print(f"approve: eisId: {eisId}, approvalStatus: {approvalStatus}, remark: {remark}")
-        return "审批已完成"
+        url = f"https://pbmcron.service.xiaoyangedu.net/api/callback/approval"
+        payload = {
+            "username": self.state.UserName,
+            "EIS_ID": eisId,
+            "approval": approvalStatus
+        }
+        HEADERS = {
+                "Content-Type": "application/json",
+                #"api-key": self.valves.AZURE_OPENAI_API_KEY,
+            }
+        response = requests.post(url, json=payload, headers=HEADERS)
+        response.raise_for_status()
+        return response.json()
+
+        #return "审批已完成"
 
     def poll_run_till_completion(
         self,
@@ -279,7 +293,8 @@ class Pipeline:
                     4. 现金流量表，相关项目现金情况及人力成本等，此部分每个项目分用季度进行了拆分，你应该查询所有季度一同展示
                     ------------------------------------------------------------
                     当用户要求进行审批时，你需要把主要信息列举一下，例如：商机名称，销售姓名，立项日期，客户名称，以及EIS_ID, 商机编号等信息，将这些信息组成一个简报
-                    展示给用户，等用户再次确认后，再进行Function-Call的调用          
+                    展示给用户，等用户再次确认后，再进行Function-Call的调用
+                    审批确认完成后，你需要返回审批结果，并再次检查目前还有多少待审批的数据，并引导进行下一条项目的审批工作。       
                     ------------------------------------------------------------      
                 ''',
                 tools=[
@@ -298,7 +313,7 @@ class Pipeline:
                                     },
                                     "approvalStatus": {
                                         "type": "integer",
-                                        "description": "审批通过对应值为1， 不通过对应值为3"
+                                        "description": "审批通过对应值为5， 不通过对应值为3"
                                     },
                                     "remark": {
                                         "type": "string",
@@ -326,6 +341,7 @@ class Pipeline:
             print("create thread!")
             thread = self.create_thread(HEADERS)
             self.state.ThreadId = thread["id"]
+            self.state.UserName = body["user"]["name"]
 
         print("create message!")
         message = self.create_message(HEADERS, thread_id=self.state.ThreadId, role="user", content=user_message)
