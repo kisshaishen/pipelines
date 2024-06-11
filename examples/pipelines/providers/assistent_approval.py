@@ -17,12 +17,12 @@ class Pipeline:
         MODEL: str = "gpt-4o"
         pass
 
-    class State:
-        ChatId: str = ""
-        CreateThread: bool = False
-        AssistantId: str = ""
-        ThreadId: str = ""
-        UserName: str = ""
+    # class State:
+    #     ChatId: str = ""
+    #     CreateThread: bool = False
+    #     AssistantId: str = ""
+    #     ThreadId: str = ""
+    #     UserName: str = ""
 
     def __init__(self):
         # Optionally, you can set the id and name of the pipeline.
@@ -32,7 +32,8 @@ class Pipeline:
         # self.id = "assistent_approval"
         self.name = "审批助手"
         self.valves = self.Valves()
-        self.state = self.State()
+        # self.state = self.State()
+        self.state = {}
         pass
 
     async def on_startup(self):
@@ -147,7 +148,7 @@ class Pipeline:
                 # return {"role": message["role"], "message": message["content"][0]["text"]["value"]}
                 return message["content"][0]["text"]["value"]
 
-    def projectapproval(self, eisId, approvalStatus, remark=""):
+    def projectapproval(self, eisId, approvalStatus, chatId, remark=""):
         """
             项目审批
             @parm eisId: Eis项目的ID
@@ -157,7 +158,7 @@ class Pipeline:
         #print(f"approve: eisId: {eisId}, approvalStatus: {approvalStatus}, remark: {remark}")
         url = f"https://pbmcron.service.xiaoyangedu.net/api/callback/approval"
         payload = {
-            "username": self.state.UserName,
+            "username": self.state[chatId]["UserName"],
             "EIS_ID": eisId,
             "approval": approvalStatus,
             "remark": remark
@@ -185,6 +186,7 @@ class Pipeline:
         threadId: str,
         runId: str,
         available_functions: dict,
+        chatId: str,
         max_steps: int = 10,
         wait: int = 3,
     ) -> None:
@@ -226,7 +228,11 @@ class Pipeline:
                                     raise Exception("Function requested by the model does not exist")
                                 
                                 function_to_call = available_functions[call["function"]["name"]]
-                                tool_response = function_to_call(**json.loads(call["function"]["arguments"]))
+
+                                arguments = json.loads(call["function"]["arguments"])
+                                arguments["chatId"] = chatId
+
+                                tool_response = function_to_call(**arguments)
                                 tool_responses["tool_outputs"].append({"tool_call_id": call["id"], "output": tool_response})
                                 print(f"tool_responses: {tool_responses}")
 
@@ -265,25 +271,31 @@ class Pipeline:
         '''
             基于WebUI的chatId来判断当前是否为新的thread
         '''
-        if self.state.ChatId == "":
-            print("first chat!")
-            self.state.ChatId = body["chat_id"]
-            self.state.CreateThread = True
-        else:
-            print("continue chat!")
-            self.state.CreateThread = False
-            print(self.state.ThreadId)
-            if self.state.ChatId != body["chat_id"]:
-                print("change chat Id!")
-                self.state.ChatId = body["chat_id"]
-                self.state.CreateThread = True
-            if self.state.AssistantId == "" or self.state.ThreadId == "":
-                print("miss assistant or thread!")
-                self.state.ChatId = body["chat_id"]
-                self.state.CreateThread = True
+        # if self.state.ChatId == "":
+        #     print("first chat!")
+        #     self.state.ChatId = body["chat_id"]
+        #     self.state.CreateThread = True
+        # else:
+        #     print("continue chat!")
+        #     self.state.CreateThread = False
+        #     print(self.state.ThreadId)
+        #     if self.state.ChatId != body["chat_id"]:
+        #         print("change chat Id!")
+        #         self.state.ChatId = body["chat_id"]
+        #         self.state.CreateThread = True
+        #     if self.state.AssistantId == "" or self.state.ThreadId == "":
+        #         print("miss assistant or thread!")
+        #         self.state.ChatId = body["chat_id"]
+        #         self.state.CreateThread = True
 
+        chatId = body["chat_id"]
+        createThread = False
+        if chatId not in self.state:
+            createThread = True
 
-        if self.state.CreateThread:
+        print("Start")
+
+        if createThread:
             assistant = self.create_assistant(
                 HEADERS,
                 name="审批助手_财务",
@@ -346,33 +358,37 @@ class Pipeline:
                 userName=body["user"]["name"]
                 
             )
-            self.state.AssistantId = assistant["id"]
+            # self.state.AssistantId = assistant["id"]
 
             print("create thread!")
             thread = self.create_thread(HEADERS)
-            self.state.ThreadId = thread["id"]
-            self.state.UserName = body["user"]["name"]
+            # self.state.ThreadId = thread["id"]
+            # self.state.UserName = body["user"]["name"]
+            self.state[chatId] = {"AssistantId": assistant["id"], "ThreadId": thread["id"], "UserName": body["user"]["name"]}
+
+        print("Chat Infomation")
+        print(f"ChatID: {chatId}, Data: {self.state[chatId]}")
 
         print("create message!")
-        message = self.create_message(HEADERS, thread_id=self.state.ThreadId, role="user", content=user_message)
+        message = self.create_message(HEADERS, thread_id=self.state[chatId]["ThreadId"], role="user", content=user_message)
 
         print("create run!")
-        run = self.create_run(HEADERS, thread_id=self.state.ThreadId, assistant_id=self.state.AssistantId)
+        run = self.create_run(HEADERS, thread_id=self.state[chatId]["ThreadId"], assistant_id=self.state[chatId]["AssistantId"])
 
         availableFunctions = {"projectapproval": self.projectapproval}
 
         print("check function call")
-        self.poll_run_till_completion(HEADERS, threadId=self.state.ThreadId, runId=run["id"], available_functions=availableFunctions)
+        self.poll_run_till_completion(HEADERS, threadId=self.state[chatId]["ThreadId"], runId=run["id"], available_functions=availableFunctions, chatId=chatId)
 
         #url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{self.valves.DEPL``OYMENT_NAME}/chat/completions?api-version={self.valves.API_VERSION}"
 
         print("check response!")
         try:
             while True:
-                run_status = self.retrieve_run(HEADERS, thread_id=self.state.ThreadId, run_id=run["id"])
+                run_status = self.retrieve_run(HEADERS, thread_id=self.state[chatId]["ThreadId"], run_id=run["id"])
 
                 if run_status["status"] == "completed":
-                    messages = self.list_messages(HEADERS, thread_id=self.state.ThreadId)                    
+                    messages = self.list_messages(HEADERS, thread_id=self.state[chatId]["ThreadId"])                    
                     rst = self.return_messages(messages)
                     print(rst)
                     return rst
