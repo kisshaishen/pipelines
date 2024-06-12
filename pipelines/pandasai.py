@@ -6,7 +6,7 @@ import requests
 class Pipeline:
     class Valves(BaseModel):
         PANDASAI_ENDPOINT: str = "https://pbmcron.service.xiaoyangedu.net/api/pandasai/chat"
-        PROVIDER: str = "qianfan",
+        PROVIDER: str = "qianfan"
         MODEL: str = "ERNIE-4.0-8K"
         # PANDASAI_ENDPOINT: str = "http://127.0.0.1:8000/api/pandasai/chat"
 
