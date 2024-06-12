@@ -1,6 +1,4 @@
-import uuid
 from typing import List, Union, Generator, Iterator
-from schemas import OpenAIChatMessage
 from pydantic import BaseModel
 import requests
 
@@ -8,10 +6,12 @@ import requests
 class Pipeline:
     class Valves(BaseModel):
         PANDASAI_ENDPOINT: str = "https://pbmcron.service.xiaoyangedu.net/api/pandasai/chat"
+        PROVIDER: str = "qianfan",
+        MODEL: str = "ERNIE-4.0-8K"
         # PANDASAI_ENDPOINT: str = "http://127.0.0.1:8000/api/pandasai/chat"
 
     def __init__(self):
-        self.name = "审批助手-PowerByPandasAi"
+        self.name = "审批助手-PowerByPandasAI"
         self.valves = self.Valves()
 
     async def on_startup(self):
@@ -29,7 +29,9 @@ class Pipeline:
     ) -> Union[str, Generator, Iterator]:
         payload = {
             "chat_id": body.get("chat_id"),
-            "message": user_message
+            "message": user_message,
+            "model": self.valves.MODEL,
+            "provider": self.valves.PROVIDER
         }
 
         response = requests.post(
